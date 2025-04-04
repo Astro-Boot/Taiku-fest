@@ -21,40 +21,17 @@ const timeToSeconds = (time) => {
 
 function RaceEvent() {
     const [drivers, setDrivers] = useState([
-		{
-			bib: 77,
-			name: 'Pedro Sereno',
-			finalTime: '02:23.00',
-			gap: '',
-		},
-		{
-			bib: 44,
-			name: 'Rayne Ramirez',
-			finalTime: '02:26.12',
-			gap: '00:03.12',
-		},
-		{
-			bib: 33,
-			name: 'Jaime Pascualin',
-			finalTime: '02:26.00',
-			gap: '00:04.00',
-		},
-		{
-			bib: 26,
-			name: 'Diego Torres',
-			finalTime: '02:27.00',
-			gap: '00:04.00',
-		},
 	]);
 
-    // New state for timer
-    const [timer, setTimer] = useState(0);
+    // New state for timer with start time
+    const [startTime, setStartTime] = useState(Date.now());
+    const [currentTime, setCurrentTime] = useState(Date.now());
 
-    // Timer effect to increment every second
+    // Timer effect to increment every frame
     useEffect(() => {
         const intervalId = setInterval(() => {
-            setTimer(prevTimer => prevTimer + 1);
-        }, 1000);
+            setCurrentTime(Date.now());
+        }, 10); // Update every 10ms for smoother millisecond tracking
 
         return () => clearInterval(intervalId);
     }, []);
@@ -110,7 +87,8 @@ function RaceEvent() {
             console.log('Recibiendo actualización de carrera:', newDriverData);
             
             // Reset timer when new race data is received
-            setTimer(0);
+            setStartTime(Date.now());
+            setCurrentTime(Date.now());
             
             setDrivers((prevDrivers) => {
                 // Verificar si el corredor ya existe por 'bib'
@@ -138,11 +116,13 @@ function RaceEvent() {
     }, []);
 
     // Helper function to format timer
-    const formatTimer = (totalSeconds) => {
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    const formatTimer = () => {
+        const totalMilliseconds = currentTime - startTime;
+        const hours = Math.floor(totalMilliseconds / 3600000);
+        const minutes = Math.floor((totalMilliseconds % 3600000) / 60000);
+        const seconds = Math.floor((totalMilliseconds % 60000) / 1000);
+        const milliseconds = totalMilliseconds % 1000;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
     };
 
     // Configurar animaciones con react-spring
@@ -203,10 +183,10 @@ function RaceEvent() {
                                             height="40"
                                         />
                                     </span>
-                                    <span>Diego Torres</span>
+                                    <span>{drivers[0]?.name || 'null'}</span>
                                 </div>
                             </div>
-                            <p className="text-[#d0de0e] self-end">{formatTimer(timer)}</p>
+                            <p className="text-[#d0de0e] self-end basis-[150px]">{formatTimer()}</p>
                         </div>
                         {/* Image */}
                         <div className="image absolute top-[-30%] left-[-7.5%] z-[1] h-auto w-full">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import io from 'socket.io-client';
 import { useTransition, animated } from 'react-spring';
 
@@ -20,21 +20,91 @@ const timeToSeconds = (time) => {
 };
 
 function RaceEvent() {
-    const [drivers, setDrivers] = useState([
-	]);
+    const [drivers, setDrivers] = useState([]);
 
-    // New state for timer with start time
-    const [startTime, setStartTime] = useState(Date.now());
-    const [currentTime, setCurrentTime] = useState(Date.now());
+    // New state for tracking race running status and timer
+    const [isRaceRunning, setIsRaceRunning] = useState(false);
+    const [startTime, setStartTime] = useState(null);
+    const [currentTime, setCurrentTime] = useState(null);
+    const [currentDriver, setCurrentDriver] = useState(null);
 
-    // Timer effect to increment every frame
+    // Timer effect to increment every frame when race is running
     useEffect(() => {
+        if (!isRaceRunning || !startTime) return;
+
         const intervalId = setInterval(() => {
             setCurrentTime(Date.now());
         }, 10); // Update every 10ms for smoother millisecond tracking
 
         return () => clearInterval(intervalId);
-    }, []);
+    }, [isRaceRunning, startTime]);
+
+    // Memoized function to convert timer to finalTime format
+    const formatFinalTime = useCallback(() => {
+        if (!startTime || !currentTime) return null;
+        
+        const totalMilliseconds = currentTime - startTime;
+        const minutes = Math.floor(totalMilliseconds / 60000);
+        const seconds = ((totalMilliseconds % 60000) / 1000).toFixed(2);
+        return `${minutes}:${seconds.padStart(5, '0')}`;
+    }, [startTime, currentTime]);
+
+    // Helper function to format timer
+    const formatTimer = () => {
+        if (!startTime || !currentTime) return '00:00:00.000';
+        
+        const totalMilliseconds = currentTime - startTime;
+        const hours = Math.floor(totalMilliseconds / 3600000);
+        const minutes = Math.floor((totalMilliseconds % 3600000) / 60000);
+        const seconds = Math.floor((totalMilliseconds % 60000) / 1000);
+        const milliseconds = totalMilliseconds % 1000;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+    };
+
+    // Escuchar actualizaciones desde Socket.IO
+    useEffect(() => {
+        console.log('Conectado al servidor de Socket.IO');
+        socket.on('race-update', (newDriverData) => {
+            console.log('Recibiendo actualización de carrera:', newDriverData);
+            
+            // If driver starts on track
+            if (newDriverData.onTrack) {
+                setIsRaceRunning(true);
+                setStartTime(Date.now());
+                setCurrentTime(Date.now());
+                setCurrentDriver(newDriverData);
+            }
+            
+            // If driver finishes track
+            if (newDriverData.offTrack) {
+                setIsRaceRunning(false);
+                const finalTime = formatFinalTime();
+                
+                setDrivers((prevDrivers) => {
+                    // Update or add driver with final time
+                    const updatedDrivers = prevDrivers.map((driver) => 
+                        driver.bib === currentDriver.bib 
+                            ? { ...driver, finalTime: finalTime }
+                            : driver
+                    );
+                    
+                    // If driver not in list, add them
+                    if (!prevDrivers.some(driver => driver.bib === currentDriver.bib)) {
+                        updatedDrivers.push({ ...currentDriver, finalTime: finalTime });
+                    }
+                    
+                    return updatedDrivers;
+                });
+                
+                setCurrentDriver(null);
+            }
+        });
+
+        // Limpiar la conexión al desmontar el componente
+        return () => {
+            socket.off('race-update');
+        };
+    }, [currentDriver, formatFinalTime]);
 
     // Efecto para recalcular tiempos y posiciones constantemente
     useEffect(() => {
@@ -79,51 +149,6 @@ function RaceEvent() {
             setDrivers(updatedDrivers);
         }
     }, [drivers]);
-
-    // Escuchar actualizaciones desde Socket.IO
-    useEffect(() => {
-        console.log('Conectado al servidor de Socket.IO');
-        socket.on('race-update', (newDriverData) => {
-            console.log('Recibiendo actualización de carrera:', newDriverData);
-            
-            // Reset timer when new race data is received
-            setStartTime(Date.now());
-            setCurrentTime(Date.now());
-            
-            setDrivers((prevDrivers) => {
-                // Verificar si el corredor ya existe por 'bib'
-                const driverExists = prevDrivers.some((driver) => driver.bib === newDriverData.bib);
-
-                let updatedDrivers;
-                if (driverExists) {
-                    // Actualizar datos del corredor existente
-                    updatedDrivers = prevDrivers.map((prevDriver) =>
-                        prevDriver.bib === newDriverData.bib ? { ...prevDriver, ...newDriverData } : prevDriver
-                    );
-                } else {
-                    // Añadir nuevo corredor si no existe
-                    updatedDrivers = [...prevDrivers, { ...newDriverData }];
-                }
-
-                return updatedDrivers;
-            });
-        });
-
-        // Limpiar la conexión al desmontar el componente
-        return () => {
-            socket.off('race-update');
-        };
-    }, []);
-
-    // Helper function to format timer
-    const formatTimer = () => {
-        const totalMilliseconds = currentTime - startTime;
-        const hours = Math.floor(totalMilliseconds / 3600000);
-        const minutes = Math.floor((totalMilliseconds % 3600000) / 60000);
-        const seconds = Math.floor((totalMilliseconds % 60000) / 1000);
-        const milliseconds = totalMilliseconds % 1000;
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
-    };
 
     // Configurar animaciones con react-spring
     const transitions = useTransition(drivers, {
@@ -183,7 +208,7 @@ function RaceEvent() {
                                             height="40"
                                         />
                                     </span>
-                                    <span>{drivers[0]?.name || 'null'}</span>
+                                    <span>{currentDriver?.name || 'null'}</span>
                                 </div>
                             </div>
                             <p className="text-[#d0de0e] self-end basis-[150px]">{formatTimer()}</p>

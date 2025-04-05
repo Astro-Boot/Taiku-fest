@@ -76,7 +76,7 @@ function RaceEvent() {
             }
             
             // If driver finishes track
-            if (newDriverData.offTrack) {
+            if (newDriverData.raceCompleted) {
                 setIsRaceRunning(false);
                 const finalTime = formatFinalTime();
                 
